@@ -71,11 +71,13 @@ func (db *DB) Put(key [KeySize]byte, val []byte) (e error) {
 	//println("put", hex.EncodeToString(key[:]))
 	if db.nosync {
 		db.dirty = true
+		db.Load()
+		db.Cache[key] = val
 	} else {
 		db.addtolog(key[:], val)
-	}
-	if db.Cache != nil {
-		db.Cache[key] = val
+		if db.Cache != nil {
+			db.Cache[key] = val
+		}
 	}
 	return
 }
@@ -85,11 +87,13 @@ func (db *DB) Del(key [KeySize]byte) (e error) {
 	//println("del", hex.EncodeToString(key[:]))
 	if db.nosync {
 		db.dirty = true
+		db.Load()
+		delete(db.Cache, key)
 	} else {
 		db.deltolog(key[:])
-	}
-	if db.Cache != nil {
-		delete(db.Cache, key)
+		if db.Cache != nil {
+			delete(db.Cache, key)
+		}
 	}
 	return
 }
@@ -99,9 +103,9 @@ func (db *DB) Del(key [KeySize]byte) (e error) {
 func (db *DB) Defrag() bool {
 	if db.logfile != nil {
 		db.Load()
+		db.savefiledat()
 		db.logfile.Close()
 		db.logfile = nil
-		db.savefiledat()
 		return true
 	}
 	return false
