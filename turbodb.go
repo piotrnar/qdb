@@ -101,8 +101,6 @@ func (db *DB) Defrag() (e error) {
 		db.logfile.Close()
 		db.logfile = nil
 		e = db.savefiledat()
-	} else {
-		println("Do not save", db.pathname)
 	}
 	return
 }
