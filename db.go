@@ -95,14 +95,16 @@ func (db *DB) Del(key [KeySize]byte) (e error) {
 }
 
 
-func (db *DB) Defrag() (e error) {
-	db.Load()
+// Return true if defrag was needed/performed
+func (db *DB) Defrag() bool {
 	if db.logfile != nil {
+		db.Load()
 		db.logfile.Close()
 		db.logfile = nil
-		e = db.savefiledat()
+		db.savefiledat()
+		return true
 	}
-	return
+	return false
 }
 
 
