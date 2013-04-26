@@ -44,7 +44,7 @@ func openAndGetSeq(fn string) (f *os.File, seq uint32) {
 func (db *DB) loadfiledat() (e error) {
 	var ks uint32
 
-	db.Cache = make(map[[KeySize]byte] []byte)
+	db.cache = make(map[[KeySize]byte] []byte)
 
 	f, seq := openAndGetSeq(db.pathname+"0")
 	f1, seq1 := openAndGetSeq(db.pathname+"1")
@@ -104,7 +104,7 @@ func (db *DB) loadfiledat() (e error) {
 		if e != nil {
 			break
 		}
-		db.Cache[key] = val
+		db.cache[key] = val
 		filepos += int64(KeySize+4+ks)
 	}
 
@@ -128,7 +128,7 @@ func (db *DB) savefiledat() (e error) {
 		goto close_and_clean
 	}
 
-	for k, v := range db.Cache {
+	for k, v := range db.cache {
 		_, e = f.Write(k[:])
 		if e != nil {
 			goto close_and_clean

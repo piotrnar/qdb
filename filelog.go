@@ -86,9 +86,9 @@ func (db *DB) loadfilelog() (e error) {
 			break
 		}
 		if cmd[0]==1 {
-			db.Cache[key] = val
+			db.cache[key] = val
 		} else {
-			delete(db.Cache, key)
+			delete(db.cache, key)
 		}
 	}
 	db.logfile.Seek(lastvalidpos, os.SEEK_SET)

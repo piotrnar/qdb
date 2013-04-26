@@ -3,8 +3,6 @@ qdb
 
 N-byte-unique-key persistent storage database
 
-Must be used from a single thread.
-
 ===
 qdb.0, qdb.1 file format:
 1) 32-but KeySize LSB

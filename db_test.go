@@ -36,10 +36,7 @@ func TestDatabase(t *testing.T) {
 		val = make([]byte, vlen)
 		cr.Read(key[:])
 		cr.Read(val[:])
-		e = db.Put(key, val)
-		if e != nil {
-			t.Error("Error during put")
-		}
+		db.Put(key, val)
 	}
 	db.Close()
 
@@ -49,7 +46,7 @@ func TestDatabase(t *testing.T) {
 		t.Error("Cannot reopen db")
 		return
 	}
-	v, _ = db.Get(key)
+	v = db.Get(key)
 	if !bytes.Equal(val[:], v[:]) {
 		t.Error("Key data mismatch")
 	}
@@ -66,7 +63,7 @@ func TestDatabase(t *testing.T) {
 		t.Error("Cannot reopen db")
 		return
 	}
-	v, _ = db.Get(key)
+	v = db.Get(key)
 	if !bytes.Equal(val[:], v[:]) {
 		t.Error("Key data mismatch")
 	}
@@ -78,10 +75,7 @@ func TestDatabase(t *testing.T) {
 		val = make([]byte, vlen)
 		cr.Read(key[:])
 		cr.Read(val[:])
-		e = db.Put(key, val)
-		if e != nil {
-			t.Error("Error during put")
-		}
+		db.Put(key, val)
 	}
 	db.Close()
 	
@@ -91,7 +85,7 @@ func TestDatabase(t *testing.T) {
 		t.Error("Cannot reopen db")
 		return
 	}
-	v, _ = db.Get(key)
+	v = db.Get(key)
 	if !bytes.Equal(val[:], v[:]) {
 		t.Error("Key data mismatch")
 	}
@@ -108,7 +102,7 @@ func TestDatabase(t *testing.T) {
 		t.Error("Cannot reopen db")
 		return
 	}
-	v, _ = db.Get(key)
+	v = db.Get(key)
 	if !bytes.Equal(val[:], v[:]) {
 		t.Error("Key data mismatch")
 	}
@@ -124,7 +118,7 @@ func TestDatabase(t *testing.T) {
 		return
 	}
 	keys = nil
-	db.FetchAll(walk)
+	db.Browse(walk)
 	for i := range keys {
 		db.Del(keys[i])
 	}
