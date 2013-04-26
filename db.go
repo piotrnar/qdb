@@ -82,13 +82,16 @@ func (db *DB) Put(key [KeySize]byte, val []byte) {
 		db.dirty = true
 		db.load()
 		db.cache[key] = val
+		db.mutex.Unlock()
 	} else {
-		db.addtolog(key[:], val)
-		if db.cache != nil {
-			db.cache[key] = val
-		}
+		go func() {
+			db.addtolog(key[:], val)
+			if db.cache != nil {
+				db.cache[key] = val
+			}
+			db.mutex.Unlock()
+		}()
 	}
-	db.mutex.Unlock()
 }
 
 
@@ -99,25 +102,35 @@ func (db *DB) Del(key [KeySize]byte) {
 		db.dirty = true
 		db.load()
 		delete(db.cache, key)
+		db.mutex.Unlock()
 	} else {
-		db.deltolog(key[:])
-		if db.cache != nil {
-			delete(db.cache, key)
-		}
+		go func() {
+			db.deltolog(key[:])
+			if db.cache != nil {
+				delete(db.cache, key)
+			}
+			db.mutex.Unlock()
+		}()
 	}
-	db.mutex.Unlock()
 }
 
 
 // Return true if defrag hes been performed, false if was not needed
-func (db *DB) Defrag() bool {
+func (db *DB) Defrag() (doing bool) {
 	db.mutex.Lock()
-	if db.logfile != nil {
-		go db.defrag() // when this completes it must call mutex.Unlock()
-		return true
+	doing = db.logfile != nil
+	if doing {
+		go func() {
+			db.load()
+			db.savefiledat()
+			db.logfile.Close()
+			db.logfile = nil
+			db.mutex.Unlock()
+		}()
+	} else {
+		db.mutex.Unlock()
 	}
-	db.mutex.Unlock()
-	return false
+	return
 }
 
 
@@ -142,15 +155,6 @@ func (db *DB) Close() {
 		db.logfile.Close()
 	}
 	db.cache = nil
-	db.mutex.Unlock()
-}
-
-
-func (db *DB) defrag() {
-	db.load()
-	db.savefiledat()
-	db.logfile.Close()
-	db.logfile = nil
 	db.mutex.Unlock()
 }
 
