@@ -15,7 +15,7 @@ const delRound = 1000
 
 
 func TestDatabase(t *testing.T) {
-	var key [KeySize]byte
+	var key KeyType
 	var val, v []byte
 	var db *DB
 	var e error
@@ -34,7 +34,7 @@ func TestDatabase(t *testing.T) {
 		//vlen := mr.Intn(4096)
 		vlen := 1
 		val = make([]byte, vlen)
-		cr.Read(key[:])
+		key = KeyType(mr.Int63())
 		cr.Read(val[:])
 		db.Put(key, val)
 	}
@@ -73,7 +73,7 @@ func TestDatabase(t *testing.T) {
 	for i:=0; i<oneRound; i++ {
 		vlen := mr.Intn(4096)
 		val = make([]byte, vlen)
-		cr.Read(key[:])
+		key = KeyType(mr.Int63())
 		cr.Read(val[:])
 		db.Put(key, val)
 	}
@@ -117,8 +117,12 @@ func TestDatabase(t *testing.T) {
 		t.Error("Cannot reopen db")
 		return
 	}
-	keys = nil
-	db.Browse(walk)
+	
+	var keys []KeyType
+	db.Browse(func (key KeyType, v []byte) bool {
+		keys = append(keys, key)
+		return len(keys)<delRound
+	})
 	for i := range keys {
 		db.Del(keys[i])
 	}
@@ -150,12 +154,4 @@ func TestDatabase(t *testing.T) {
 	os.RemoveAll(dbname)
 }
 
-var keys [][KeySize]byte
-
-func walk(k, v []byte) bool {
-	var key [KeySize]byte
-	copy(key[:], k)
-	keys = append(keys, key)
-	return len(keys)<delRound
-}
 

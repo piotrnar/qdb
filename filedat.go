@@ -44,7 +44,7 @@ func openAndGetSeq(fn string) (f *os.File, seq uint32) {
 func (db *DB) loadfiledat() (e error) {
 	var ks uint32
 
-	db.cache = make(map[[KeySize]byte] []byte)
+	db.cache = make(map[KeyType] []byte)
 
 	f, seq := openAndGetSeq(db.pathname+"0")
 	f1, seq1 := openAndGetSeq(db.pathname+"1")
@@ -79,19 +79,10 @@ func (db *DB) loadfiledat() (e error) {
 
 	db.version_seq = seq
 
-	e = binary.Read(f, binary.LittleEndian, &ks)
-	if e != nil || ks != KeySize {
-		f.Close()
-		e = errors.New("Incompatible key size")
-		os.Remove(db.pathname+"0")
-		os.Remove(db.pathname+"1")
-		return
-	}
-
-	var key [KeySize]byte
-	filepos := int64(4)
+	var key KeyType
+	var filepos int64
 	for filepos+KeySize+4 <= readlimit {
-		_, e = f.Read(key[:])
+		e = binary.Read(f, binary.LittleEndian, &key)
 		if e != nil {
 			break
 		}
@@ -123,13 +114,9 @@ func (db *DB) savefiledat() (e error) {
 	if e != nil {
 		return
 	}
-	e = binary.Write(f, binary.LittleEndian, uint32(KeySize))
-	if e != nil {
-		goto close_and_clean
-	}
 
 	for k, v := range db.cache {
-		_, e = f.Write(k[:])
+		e = binary.Write(f, binary.LittleEndian, k)
 		if e != nil {
 			goto close_and_clean
 		}

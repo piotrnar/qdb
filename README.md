@@ -1,18 +1,16 @@
 qdb
 ===
 
-N-byte-unique-key persistent storage database
+64-bit-unique-key persistent storage database
 
 ===
-qdb.0, qdb.1 file format:
-1) 32-but KeySize LSB
-2 ... N-1)
+qdb.0, qdb.1 file contans raw records of:
  * KeySize bytes - Key
  * 32-bits LSB - Value Length
  * Value Length bytes - Value
-N)
+.. the file ends with the end merker:
  * FFFFFFFF - Marker
- * 32-bits LSB - DB version sequence
+ * 32-bits LSB - DB version sequence (used to match the log file)
  * "FINI"
 
 ===

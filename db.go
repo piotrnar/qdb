@@ -8,6 +8,7 @@ import (
 )
 
 
+type KeyType uint64
 const KeySize = 8
 
 
@@ -15,7 +16,7 @@ type DB struct {
 	pathname string
 	
 	mutex sync.Mutex
-	cache map[[KeySize]byte] []byte
+	cache map[KeyType] []byte
 	file_index int // can be only 0 or 1
 	version_seq uint32
 	
@@ -54,11 +55,11 @@ func (db *DB) Count() (l int) {
 }
 
 
-func (db *DB) Browse(walk func(k, v []byte) bool) {
+func (db *DB) Browse(walk func(k KeyType, v []byte) bool) {
 	db.mutex.Lock()
 	db.load()
 	for k, v := range db.cache {
-		if !walk(k[:], v) {
+		if !walk(k, v) {
 			break
 		}
 	}
@@ -66,7 +67,7 @@ func (db *DB) Browse(walk func(k, v []byte) bool) {
 }
 
 
-func (db *DB) Get(key [KeySize]byte) (val []byte) {
+func (db *DB) Get(key KeyType) (val []byte) {
 	db.mutex.Lock()
 	db.load()
 	val, _ = db.cache[key]
@@ -75,7 +76,7 @@ func (db *DB) Get(key [KeySize]byte) (val []byte) {
 }
 
 
-func (db *DB) Put(key [KeySize]byte, val []byte) {
+func (db *DB) Put(key KeyType, val []byte) {
 	//println("put", hex.EncodeToString(key[:]))
 	db.mutex.Lock()
 	if db.nosync {
@@ -85,7 +86,7 @@ func (db *DB) Put(key [KeySize]byte, val []byte) {
 		db.mutex.Unlock()
 	} else {
 		go func() {
-			db.addtolog(key[:], val)
+			db.addtolog(key, val)
 			if db.cache != nil {
 				db.cache[key] = val
 			}
@@ -95,7 +96,7 @@ func (db *DB) Put(key [KeySize]byte, val []byte) {
 }
 
 
-func (db *DB) Del(key [KeySize]byte) {
+func (db *DB) Del(key KeyType) {
 	//println("del", hex.EncodeToString(key[:]))
 	db.mutex.Lock()
 	if db.nosync {
@@ -105,7 +106,7 @@ func (db *DB) Del(key [KeySize]byte) {
 		db.mutex.Unlock()
 	} else {
 		go func() {
-			db.deltolog(key[:])
+			db.deltolog(key)
 			if db.cache != nil {
 				delete(db.cache, key)
 			}

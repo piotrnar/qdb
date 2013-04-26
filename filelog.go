@@ -22,7 +22,7 @@ func (db *DB) checklogfile() (e error) {
 func (db *DB) loadfilelog() (e error) {
 	var u32 uint32
 	var cmd [1]byte
-	var key [KeySize]byte
+	var key KeyType
 	var lastvalidpos int64
 	var n int
 	var val []byte
@@ -53,13 +53,13 @@ func (db *DB) loadfilelog() (e error) {
 		if n!=1 || e!=nil {
 			break
 		}
-		n, e = db.logfile.Read(key[:])
-		if n!=len(key) || e!=nil {
+		e = binary.Read(db.logfile, binary.LittleEndian, &key)
+		if e!=nil {
 			break
 		}
 		crc := crc32.NewIEEE()
 		crc.Write(cmd[:])
-		crc.Write(key[:])
+		binary.Write(crc, binary.LittleEndian, key)
 		if cmd[0]==1 {
 			e = binary.Read(db.logfile, binary.LittleEndian, &u32)
 			if e != nil {
@@ -103,7 +103,7 @@ close_and_clean:
 
 
 // add record at the end of the log
-func (db *DB) addtolog(key, val []byte) (e error) {
+func (db *DB) addtolog(key KeyType, val []byte) (e error) {
 	e = db.checklogfile()
 	if e != nil {
 		return
@@ -115,7 +115,7 @@ func (db *DB) addtolog(key, val []byte) (e error) {
 		return
 	}
 	
-	_, e = db.logfile.Write(key[:])
+	e = binary.Write(db.logfile, binary.LittleEndian, key)
 	if e != nil {
 		return
 	}
@@ -132,7 +132,7 @@ func (db *DB) addtolog(key, val []byte) (e error) {
 	
 	crc := crc32.NewIEEE()
 	crc.Write(add[:])
-	crc.Write(key[:])
+	binary.Write(crc, binary.LittleEndian, key)
 	binary.Write(crc, binary.LittleEndian, uint32(len(val)))
 	crc.Write(val[:])
 
@@ -146,7 +146,7 @@ func (db *DB) addtolog(key, val []byte) (e error) {
 
 
 // append delete record at the end of the log
-func (db *DB) deltolog(key []byte) (e error) {
+func (db *DB) deltolog(key KeyType) (e error) {
 	e = db.checklogfile()
 	if e != nil {
 		return
@@ -158,14 +158,14 @@ func (db *DB) deltolog(key []byte) (e error) {
 		return
 	}
 	
-	_, e = db.logfile.Write(key[:])
+	e = binary.Write(db.logfile, binary.LittleEndian, key)
 	if e != nil {
 		return
 	}
 	
 	crc := crc32.NewIEEE()
 	crc.Write(del[:])
-	crc.Write(key[:])
+	e = binary.Write(crc, binary.LittleEndian, key)
 
 	e = binary.Write(db.logfile, binary.LittleEndian, uint32(crc.Sum32()))
 	if e != nil {
