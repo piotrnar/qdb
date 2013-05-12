@@ -13,7 +13,7 @@ They data is stored on a disk, in a folder specified during the call to NewDB().
 There are can be three possible files in that folder
  * qdb.0, qdb.1 - these files store a compact version of the entire database
  * qdb.log - this one stores the changes since the most recent qdb.0 or qdb.1
-                                                                 
+
 */
 package qdb
 
@@ -29,12 +29,12 @@ const KeySize = 8
 
 type DB struct {
 	pathname string
-	
+
 	mutex sync.Mutex
 	cache map[KeyType] []byte
 	file_index int // can be only 0 or 1
 	version_seq uint32
-	
+
 	logfile *os.File
 
 	nosync bool
@@ -68,7 +68,7 @@ func (db *DB) Count() (l int) {
 	db.load()
 	l = len(db.cache)
 	db.mutex.Unlock()
-	return 
+	return
 }
 
 
@@ -145,9 +145,9 @@ func (db *DB) Defrag() (doing bool) {
 	if doing {
 		go func() {
 			db.load()
-			db.savefiledat()
 			db.logfile.Close()
 			db.logfile = nil
+			db.savefiledat()
 			db.mutex.Unlock()
 		}()
 	} else {
@@ -203,4 +203,3 @@ func (db *DB) sync() {
 		db.logfile.Sync()
 	}
 }
-
