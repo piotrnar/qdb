@@ -2,6 +2,7 @@ package qdb
 
 import (
 	"os"
+	"io"
 	"errors"
 	"hash/crc32"
 	"encoding/binary"
@@ -28,10 +29,10 @@ func (db *DB) loadfilelog() (e error) {
 	var val []byte
 
 	if db.logfile != nil {
-		e = errors.New("loading logfile not possible when the fiel is already open")
+		e = errors.New("loading logfile not possible when the file is already open")
 		return
 	}
-	
+
 	db.logfile, e = os.OpenFile(db.pathname+"log", os.O_RDWR, 0660)
 	if e != nil {
 		return
@@ -51,6 +52,9 @@ func (db *DB) loadfilelog() (e error) {
 		lastvalidpos, _ = db.logfile.Seek(0, os.SEEK_CUR)
 		n, e = db.logfile.Read(cmd[:])
 		if n!=1 || e!=nil {
+			if e==io.EOF {
+				e = nil
+			}
 			break
 		}
 		e = binary.Read(db.logfile, binary.LittleEndian, &key)
@@ -72,8 +76,7 @@ func (db *DB) loadfilelog() (e error) {
 			}
 			binary.Write(crc, binary.LittleEndian, u32)
 			crc.Write(val[:])
-		} else if cmd[0]==0 {
-		} else {
+		} else if cmd[0]!=0 {
 			e = errors.New("Unexpected command in logfile")
 			break
 		}
@@ -91,10 +94,16 @@ func (db *DB) loadfilelog() (e error) {
 			delete(db.cache, key)
 		}
 	}
+	if e!=nil {
+		println(db.pathname+"log", "-", e.Error())
+	}
 	db.logfile.Seek(lastvalidpos, os.SEEK_SET)
 	return
 
 close_and_clean:
+	if e!=nil {
+		println(db.pathname+"log", ":", e.Error())
+	}
 	db.logfile.Close()
 	db.logfile = nil
 	os.Remove(db.pathname+"log")
@@ -109,27 +118,27 @@ func (db *DB) addtolog(key KeyType, val []byte) (e error) {
 		return
 	}
 	add := [1]byte{1}
-	
+
 	_, e = db.logfile.Write(add[:]) // add
 	if e != nil {
 		return
 	}
-	
+
 	e = binary.Write(db.logfile, binary.LittleEndian, key)
 	if e != nil {
 		return
 	}
-	
+
 	e = binary.Write(db.logfile, binary.LittleEndian, uint32(len(val)))
 	if e != nil {
 		return
 	}
-	
+
 	_, e = db.logfile.Write(val[:])
 	if e != nil {
 		return
 	}
-	
+
 	crc := crc32.NewIEEE()
 	crc.Write(add[:])
 	binary.Write(crc, binary.LittleEndian, key)
@@ -140,7 +149,7 @@ func (db *DB) addtolog(key KeyType, val []byte) (e error) {
 	if e != nil {
 		return
 	}
-	
+
 	return
 }
 
@@ -152,17 +161,17 @@ func (db *DB) deltolog(key KeyType) (e error) {
 		return
 	}
 	var del [1]byte
-	
+
 	_, e = db.logfile.Write(del[:]) // add
 	if e != nil {
 		return
 	}
-	
+
 	e = binary.Write(db.logfile, binary.LittleEndian, key)
 	if e != nil {
 		return
 	}
-	
+
 	crc := crc32.NewIEEE()
 	crc.Write(del[:])
 	e = binary.Write(crc, binary.LittleEndian, key)
@@ -171,8 +180,6 @@ func (db *DB) deltolog(key KeyType) (e error) {
 	if e != nil {
 		return
 	}
-	
+
 	return
 }
-
-
