@@ -12,24 +12,27 @@ func openAndGetSeq(fn string) (f *os.File, seq uint32) {
 	var b [12]byte
 	var e error
 	var fpos int64
-	
+
 	if f, e = os.Open(fn); e != nil {
 		return
 	}
-	
+
 	if fpos, e = f.Seek(-12, os.SEEK_END); e!=nil || fpos<4 {
+		println(fn, ":", "openAndGetSeq fseek error", e, fpos)
 		f.Close()
 		f = nil
 		return
 	}
 
 	if _, e = f.Read(b[:]); e != nil {
+		println(fn, ":", "openAndGetSeq read error", e.Error())
 		f.Close()
 		f = nil
 		return
 	}
 
 	if binary.LittleEndian.Uint32(b[0:4])!=0xffffffff || string(b[8:12])!="FINI" {
+		println(fn, ":", "openAndGetSeq marker error")
 		f.Close()
 		f = nil
 		return
@@ -48,7 +51,7 @@ func (db *DB) loadfiledat() (e error) {
 
 	f, seq := openAndGetSeq(db.pathname+"0")
 	f1, seq1 := openAndGetSeq(db.pathname+"1")
-	
+
 	if f == nil && f1 == nil {
 		e = errors.New("No database")
 		return
@@ -109,7 +112,7 @@ func (db *DB) savefiledat() (e error) {
 	var f *os.File
 	new_file_index := 1 - db.file_index
 	fname := fmt.Sprint(db.pathname, new_file_index)
-	
+
 	f, e = os.Create(fname)
 	if e != nil {
 		return
@@ -148,10 +151,10 @@ func (db *DB) savefiledat() (e error) {
 
 	os.Remove(fmt.Sprint(db.pathname, db.file_index))
 	os.Remove(db.pathname+"log")
-	
+
 	db.version_seq++
 	db.file_index = new_file_index
-	
+
 	return
 
 close_and_clean:
