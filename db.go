@@ -103,16 +103,13 @@ func (db *DB) Put(key KeyType, value []byte) {
 		db.dirty = true
 		db.load()
 		db.cache[key] = value
-		db.mutex.Unlock()
 	} else {
-		go func() {
-			db.addtolog(key, value)
-			if db.cache != nil {
-				db.cache[key] = value
-			}
-			db.mutex.Unlock()
-		}()
+		db.addtolog(key, value)
+		if db.cache != nil {
+			db.cache[key] = value
+		}
 	}
+	db.mutex.Unlock()
 }
 
 
@@ -124,16 +121,13 @@ func (db *DB) Del(key KeyType) {
 		db.dirty = true
 		db.load()
 		delete(db.cache, key)
-		db.mutex.Unlock()
 	} else {
-		go func() {
-			db.deltolog(key)
-			if db.cache != nil {
-				delete(db.cache, key)
-			}
-			db.mutex.Unlock()
-		}()
+		db.deltolog(key)
+		if db.cache != nil {
+			delete(db.cache, key)
+		}
 	}
+	db.mutex.Unlock()
 }
 
 
