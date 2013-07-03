@@ -88,14 +88,30 @@ func (db *DB) loadfilelog() {
 			e = errors.New("CRC mismatch")
 			break
 		}
+		idx := db.index[key]
 		if cmd[0]==1 {
-			if db.KeepInMem==nil || db.KeepInMem(val) {
-				db.index[key] = &oneIdx{data:val, fpos:-lastvalidpos}
+			keep := !db.NeverKeepInMem && (db.KeepInMem==nil || db.KeepInMem(val))
+			if idx!=nil {
+				// this is a record's update
+				idx.fpos = -lastvalidpos
+				if keep {
+					idx.data = val
+				} else {
+					idx.data = nil
+				}
 			} else {
-				db.index[key] = &oneIdx{fpos:-lastvalidpos}
+				// the record needs to eb added
+				if keep {
+					db.index[key] = &oneIdx{data:val, fpos:-lastvalidpos}
+				} else {
+					db.index[key] = &oneIdx{fpos:-lastvalidpos}
+				}
 			}
 		} else {
-			delete(db.index, key)
+			if idx != nil {
+				// we had such a record, so delete it from the map
+				delete(db.index, key)
+			}
 		}
 	}
 	if e!=nil {

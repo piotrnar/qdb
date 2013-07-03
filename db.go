@@ -45,6 +45,7 @@ type DB struct {
 	nosync bool
 	dirty bool
 
+	NeverKeepInMem bool
 	KeepInMem func(v []byte) bool
 }
 

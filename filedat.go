@@ -98,7 +98,7 @@ func (db *DB) loadfiledat() (e error) {
 		if e != nil {
 			break
 		}
-		if db.KeepInMem==nil || db.KeepInMem(val) {
+		if !db.NeverKeepInMem && (db.KeepInMem==nil || db.KeepInMem(val)) {
 			db.index[key] = &oneIdx{data:val, fpos:filepos}
 		} else {
 			db.index[key] = &oneIdx{fpos:filepos}
@@ -131,11 +131,10 @@ func (db *DB) savefiledat() {
 		binary.Write(f, binary.LittleEndian, uint32(len(v)))
 		f.Write(v)
 
-		if db.KeepInMem==nil || db.KeepInMem(v) {
-			db.index[k] = &oneIdx{data:v, fpos:fpos}
-		} else {
-			db.index[k] = &oneIdx{fpos:fpos}
-		}
+		idx.fpos = fpos
+		/*if !db.NeverKeepInMem && (db.KeepInMem==nil || db.KeepInMem(v)) {
+			idx.data = v
+		}*/
 		fpos += KeySize+4+int64(len(v))
 	}
 
