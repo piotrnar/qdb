@@ -45,7 +45,13 @@ type DB struct {
 	nosync bool
 	dirty bool
 
+	// If NeverKeepInMem is set to true, the engine will never keep DB records
+	// in memory, but will laways need to read them from disk.
 	NeverKeepInMem bool
+
+	// Set this function if you want to be able to decide whether a specific
+	// record should be kept in memory, or freed after loaded, thus will need
+	// to be taken from disk whenever needed next time.
 	KeepInMem func(v []byte) bool
 }
 
