@@ -93,15 +93,23 @@ func (db *DB) loadfiledat() (e error) {
 		if e != nil {
 			break
 		}
-		val := make([]byte, ks)
-		_, e = f.Read(val[:])
-		if e != nil {
-			break
-		}
-		if !db.NeverKeepInMem && (db.KeepInMem==nil || db.KeepInMem(val)) {
-			db.index[key] = &oneIdx{data:val, fpos:filepos}
-		} else {
+		if db.NeverKeepInMem {
+			_, e = f.Seek(int64(ks), os.SEEK_CUR)
+			if e != nil {
+				break
+			}
 			db.index[key] = &oneIdx{fpos:filepos}
+		} else {
+			val := make([]byte, ks)
+			_, e = f.Read(val[:])
+			if e != nil {
+				break
+			}
+			if db.KeepInMem==nil || db.KeepInMem(val) {
+				db.index[key] = &oneIdx{data:val, fpos:filepos}
+			} else {
+				db.index[key] = &oneIdx{fpos:filepos}
+			}
 		}
 		filepos += int64(KeySize+4+ks)
 	}
