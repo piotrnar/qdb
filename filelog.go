@@ -48,7 +48,6 @@ func (db *DB) loadfilelog() {
 
 	// Load records
 	for {
-		db.lastvalidlogpos, _ = db.logfile.Seek(0, os.SEEK_CUR)
 		n, e = db.logfile.Read(cmd[:])
 		if n!=1 || e!=nil {
 			if e==io.EOF {
@@ -107,11 +106,13 @@ func (db *DB) loadfilelog() {
 					db.index[key] = &oneIdx{fpos:-db.lastvalidlogpos}
 				}
 			}
+			db.lastvalidlogpos += 1+KeySize+4+int64(len(val))+4
 		} else {
 			if idx != nil {
 				// we had such a record, so delete it from the map
 				delete(db.index, key)
 			}
+			db.lastvalidlogpos += 1+KeySize+4
 		}
 	}
 	if e!=nil {
