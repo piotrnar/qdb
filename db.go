@@ -41,6 +41,7 @@ type DB struct {
 
 	logfile *os.File
 	datfile *os.File
+	lastvalidlogpos int64
 
 	nosync bool
 	dirty bool
