@@ -13,6 +13,7 @@ func (db *DB) checklogfile() {
 	if db.logfile == nil {
 		db.logfile, _ = os.Create(db.pathname+"log")
 		binary.Write(db.logfile, binary.LittleEndian, uint32(db.version_seq))
+		db.lastvalidlogpos = 4
 	}
 	return
 }
@@ -22,7 +23,6 @@ func (db *DB) loadfilelog() {
 	var u32 uint32
 	var cmd [1]byte
 	var key KeyType
-	var lastvalidpos int64
 	var n int
 	var val []byte
 	var e error
@@ -44,10 +44,11 @@ func (db *DB) loadfilelog() {
 		e = errors.New("logfile sequence mismatch")
 		goto close_and_clean
 	}
+	db.lastvalidlogpos = 4
 
 	// Load records
 	for {
-		lastvalidpos, _ = db.logfile.Seek(0, os.SEEK_CUR)
+		db.lastvalidlogpos, _ = db.logfile.Seek(0, os.SEEK_CUR)
 		n, e = db.logfile.Read(cmd[:])
 		if n!=1 || e!=nil {
 			if e==io.EOF {
@@ -92,7 +93,7 @@ func (db *DB) loadfilelog() {
 			keep := !db.NeverKeepInMem && (db.KeepInMem==nil || db.KeepInMem(val))
 			if idx!=nil {
 				// this is a record's update
-				idx.fpos = -lastvalidpos
+				idx.fpos = -db.lastvalidlogpos
 				if keep {
 					idx.data = val
 				} else {
@@ -101,9 +102,9 @@ func (db *DB) loadfilelog() {
 			} else {
 				// the record needs to eb added
 				if keep {
-					db.index[key] = &oneIdx{data:val, fpos:-lastvalidpos}
+					db.index[key] = &oneIdx{data:val, fpos:-db.lastvalidlogpos}
 				} else {
-					db.index[key] = &oneIdx{fpos:-lastvalidpos}
+					db.index[key] = &oneIdx{fpos:-db.lastvalidlogpos}
 				}
 			}
 		} else {
@@ -116,7 +117,6 @@ func (db *DB) loadfilelog() {
 	if e!=nil {
 		println(db.pathname+"log", "-", e.Error())
 	}
-	db.logfile.Seek(lastvalidpos, os.SEEK_SET)
 	return
 
 close_and_clean:
@@ -135,7 +135,9 @@ func (db *DB) addtolog(key KeyType, val []byte) (fpos int64) {
 	db.checklogfile()
 	add := [1]byte{1}
 
-	fpos, _ = db.logfile.Seek(0, os.SEEK_END)
+	fpos = db.lastvalidlogpos
+	db.logfile.Seek(db.lastvalidlogpos, os.SEEK_SET)
+	db.lastvalidlogpos += 1+KeySize+4+int64(len(val))+4
 
 	db.logfile.Write(add[:]) // add
 	binary.Write(db.logfile, binary.LittleEndian, key)
@@ -159,7 +161,9 @@ func (db *DB) deltolog(key KeyType) {
 	db.checklogfile()
 	var del [1]byte
 
-	db.logfile.Seek(0, os.SEEK_END)
+	db.logfile.Seek(db.lastvalidlogpos, os.SEEK_SET)
+	db.lastvalidlogpos += 1+KeySize+4
+
 	db.logfile.Write(del[:]) // add
 	binary.Write(db.logfile, binary.LittleEndian, key)
 
