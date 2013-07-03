@@ -9,28 +9,26 @@ import (
 )
 
 
-func (db *DB) checklogfile() (e error) {
+func (db *DB) checklogfile() {
 	if db.logfile == nil {
-		db.logfile, e = os.Create(db.pathname+"log")
-		if e == nil {
-			binary.Write(db.logfile, binary.LittleEndian, uint32(db.version_seq))
-		}
+		db.logfile, _ = os.Create(db.pathname+"log")
+		binary.Write(db.logfile, binary.LittleEndian, uint32(db.version_seq))
 	}
 	return
 }
 
 
-func (db *DB) loadfilelog() (e error) {
+func (db *DB) loadfilelog() {
 	var u32 uint32
 	var cmd [1]byte
 	var key KeyType
 	var lastvalidpos int64
 	var n int
 	var val []byte
+	var e error
 
 	if db.logfile != nil {
-		e = errors.New("loading logfile not possible when the file is already open")
-		return
+		panic("logfile already open")
 	}
 
 	db.logfile, e = os.OpenFile(db.pathname+"log", os.O_RDWR, 0660)
@@ -85,13 +83,19 @@ func (db *DB) loadfilelog() (e error) {
 			break
 		}
 		if u32 != crc.Sum32() {
+			println("CRC mismatch", lastvalidpos, key)
+			os.Exit(1)
 			e = errors.New("CRC mismatch")
 			break
 		}
 		if cmd[0]==1 {
-			db.cache[key] = val
+			if db.KeepInMem==nil || db.KeepInMem(val) {
+				db.index[key] = &oneIdx{data:val, fpos:-lastvalidpos}
+			} else {
+				db.index[key] = &oneIdx{fpos:-lastvalidpos}
+			}
 		} else {
-			delete(db.cache, key)
+			delete(db.index, key)
 		}
 	}
 	if e!=nil {
@@ -112,32 +116,16 @@ close_and_clean:
 
 
 // add record at the end of the log
-func (db *DB) addtolog(key KeyType, val []byte) (e error) {
-	e = db.checklogfile()
-	if e != nil {
-		return
-	}
+func (db *DB) addtolog(key KeyType, val []byte) (fpos int64) {
+	db.checklogfile()
 	add := [1]byte{1}
 
-	_, e = db.logfile.Write(add[:]) // add
-	if e != nil {
-		return
-	}
+	fpos, _ = db.logfile.Seek(0, os.SEEK_END)
 
-	e = binary.Write(db.logfile, binary.LittleEndian, key)
-	if e != nil {
-		return
-	}
-
-	e = binary.Write(db.logfile, binary.LittleEndian, uint32(len(val)))
-	if e != nil {
-		return
-	}
-
-	_, e = db.logfile.Write(val[:])
-	if e != nil {
-		return
-	}
+	db.logfile.Write(add[:]) // add
+	binary.Write(db.logfile, binary.LittleEndian, key)
+	binary.Write(db.logfile, binary.LittleEndian, uint32(len(val)))
+	db.logfile.Write(val[:])
 
 	crc := crc32.NewIEEE()
 	crc.Write(add[:])
@@ -145,41 +133,25 @@ func (db *DB) addtolog(key KeyType, val []byte) (e error) {
 	binary.Write(crc, binary.LittleEndian, uint32(len(val)))
 	crc.Write(val[:])
 
-	e = binary.Write(db.logfile, binary.LittleEndian, uint32(crc.Sum32()))
-	if e != nil {
-		return
-	}
+	binary.Write(db.logfile, binary.LittleEndian, uint32(crc.Sum32()))
 
 	return
 }
 
 
 // append delete record at the end of the log
-func (db *DB) deltolog(key KeyType) (e error) {
-	e = db.checklogfile()
-	if e != nil {
-		return
-	}
+func (db *DB) deltolog(key KeyType) {
+	db.checklogfile()
 	var del [1]byte
 
-	_, e = db.logfile.Write(del[:]) // add
-	if e != nil {
-		return
-	}
-
-	e = binary.Write(db.logfile, binary.LittleEndian, key)
-	if e != nil {
-		return
-	}
+	db.logfile.Seek(0, os.SEEK_END)
+	db.logfile.Write(del[:]) // add
+	binary.Write(db.logfile, binary.LittleEndian, key)
 
 	crc := crc32.NewIEEE()
 	crc.Write(del[:])
-	e = binary.Write(crc, binary.LittleEndian, key)
-
-	e = binary.Write(db.logfile, binary.LittleEndian, uint32(crc.Sum32()))
-	if e != nil {
-		return
-	}
+	binary.Write(crc, binary.LittleEndian, key)
+	binary.Write(db.logfile, binary.LittleEndian, uint32(crc.Sum32()))
 
 	return
 }

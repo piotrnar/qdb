@@ -2,16 +2,27 @@ package qdb
 
 import (
 	"testing"
-    "time"
+	"time"
 	"os"
 	"bytes"
 	mr "math/rand"
 	cr "crypto/rand"
 )
 
-const dbname = "test"
-const oneRound = 10000
-const delRound = 1000
+const (
+	dbname = "test"
+	oneRound = 10000
+	delRound = 1000
+)
+
+func getRecSize() int {
+	return mr.Intn(4096)
+}
+
+
+func kim(v []byte) bool {
+	return (mr.Int63()&1)==0
+}
 
 
 func TestDatabase(t *testing.T) {
@@ -19,20 +30,19 @@ func TestDatabase(t *testing.T) {
 	var val, v []byte
 	var db *DB
 	var e error
-	
+
 	os.RemoveAll(dbname)
 	mr.Seed(time.Now().UnixNano())
-	
+
 	db, e = NewDB(dbname)
 	if e != nil {
 		t.Error("Cannot create db")
 		return
 	}
-	
+
 	// Add oneRound random records
 	for i:=0; i<oneRound; i++ {
-		//vlen := mr.Intn(4096)
-		vlen := 1
+		vlen := getRecSize()
 		val = make([]byte, vlen)
 		key = KeyType(mr.Int63())
 		cr.Read(val[:])
@@ -46,6 +56,7 @@ func TestDatabase(t *testing.T) {
 		t.Error("Cannot reopen db")
 		return
 	}
+	db.KeepInMem = kim
 	v = db.Get(key)
 	if !bytes.Equal(val[:], v[:]) {
 		t.Error("Key data mismatch")
@@ -55,14 +66,15 @@ func TestDatabase(t *testing.T) {
 	}
 	db.Defrag()
 	db.Close()
-	
-	
+
+
 	// Reopen DB, verify, add oneRound more records and Close
 	db, e = NewDB(dbname)
 	if e != nil {
 		t.Error("Cannot reopen db")
 		return
 	}
+	db.KeepInMem = kim
 	v = db.Get(key)
 	if !bytes.Equal(val[:], v[:]) {
 		t.Error("Key data mismatch")
@@ -71,20 +83,21 @@ func TestDatabase(t *testing.T) {
 		t.Error("Wrong number of records", db.Count())
 	}
 	for i:=0; i<oneRound; i++ {
-		vlen := mr.Intn(4096)
+		vlen := getRecSize()
 		val = make([]byte, vlen)
 		key = KeyType(mr.Int63())
 		cr.Read(val[:])
 		db.Put(key, val)
 	}
 	db.Close()
-	
+
 	// Reopen DB, verify, defrag and close
 	db, e = NewDB(dbname)
 	if e != nil {
 		t.Error("Cannot reopen db")
 		return
 	}
+	db.KeepInMem = kim
 	v = db.Get(key)
 	if !bytes.Equal(val[:], v[:]) {
 		t.Error("Key data mismatch")
@@ -94,10 +107,11 @@ func TestDatabase(t *testing.T) {
 	}
 	db.Defrag()
 	db.Close()
-	
-	
+
+
 	// Reopen DB, verify, close...
 	db, e = NewDB(dbname)
+	db.KeepInMem = kim
 	if e != nil {
 		t.Error("Cannot reopen db")
 		return
@@ -113,11 +127,12 @@ func TestDatabase(t *testing.T) {
 
 	// Reopen, delete 100 records, close...
 	db, e = NewDB(dbname)
+	db.KeepInMem = kim
 	if e != nil {
 		t.Error("Cannot reopen db")
 		return
 	}
-	
+
 	var keys []KeyType
 	db.Browse(func (key KeyType, v []byte) bool {
 		keys = append(keys, key)
@@ -127,15 +142,16 @@ func TestDatabase(t *testing.T) {
 		db.Del(keys[i])
 	}
 	db.Close()
-	
+
 	// Reopen DB, verify, close...
 	db, e = NewDB(dbname)
+	db.KeepInMem = kim
 	db.Load()
 	if db.Count() != 2*oneRound-delRound {
 		t.Error("Wrong number of records", db.Count())
 	}
 	db.Close()
-	
+
 	// Reopen DB, verify, close...
 	db, e = NewDB(dbname)
 	db.Defrag()
@@ -143,15 +159,13 @@ func TestDatabase(t *testing.T) {
 		t.Error("Wrong number of records", db.Count())
 	}
 	db.Close()
-	
+
 	// Reopen DB, verify, close...
 	db, e = NewDB(dbname)
 	if db.Count() != 2*oneRound-delRound {
 		t.Error("Wrong number of records", db.Count())
 	}
 	db.Close()
-	
+
 	os.RemoveAll(dbname)
 }
-
-

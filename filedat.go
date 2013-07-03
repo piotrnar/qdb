@@ -47,7 +47,7 @@ func openAndGetSeq(fn string) (f *os.File, seq uint32) {
 func (db *DB) loadfiledat() (e error) {
 	var ks uint32
 
-	db.cache = make(map[KeyType] []byte)
+	db.index = make(map[KeyType] *oneIdx)
 
 	f, seq := openAndGetSeq(db.pathname+"0")
 	f1, seq1 := openAndGetSeq(db.pathname+"1")
@@ -98,67 +98,81 @@ func (db *DB) loadfiledat() (e error) {
 		if e != nil {
 			break
 		}
-		db.cache[key] = val
+		if db.KeepInMem==nil || db.KeepInMem(val) {
+			db.index[key] = &oneIdx{data:val, fpos:filepos}
+		} else {
+			db.index[key] = &oneIdx{fpos:filepos}
+		}
 		filepos += int64(KeySize+4+ks)
 	}
 
-	f.Close()
+	db.datfile = f
 	return
 }
 
 
-func (db *DB) savefiledat() (e error) {
-	cnt := 0
+func (db *DB) savefiledat() {
 	var f *os.File
 	new_file_index := 1 - db.file_index
 	fname := fmt.Sprint(db.pathname, new_file_index)
 
-	f, e = os.Create(fname)
-	if e != nil {
-		return
-	}
+	f, _ = os.Create(fname)
 
-	for k, v := range db.cache {
-		e = binary.Write(f, binary.LittleEndian, k)
-		if e != nil {
-			goto close_and_clean
+	var v []byte
+	var fpos int64
+	for k, idx := range db.index {
+		if idx.data == nil {
+			v = db.loadrec(idx.fpos)
+		} else {
+			v = idx.data
 		}
-		e = binary.Write(f, binary.LittleEndian, uint32(len(v)))
-		if e != nil {
-			goto close_and_clean
+
+		binary.Write(f, binary.LittleEndian, k)
+		binary.Write(f, binary.LittleEndian, uint32(len(v)))
+		f.Write(v)
+
+		if db.KeepInMem==nil || db.KeepInMem(v) {
+			db.index[k] = &oneIdx{data:v, fpos:fpos}
+		} else {
+			db.index[k] = &oneIdx{fpos:fpos}
 		}
-		_, e = f.Write(v[:])
-		if e != nil {
-			goto close_and_clean
-		}
-		cnt++
+		fpos += KeySize+4+int64(len(v))
 	}
 
-	_, e = f.Write([]byte{0xff,0xff,0xff,0xff})
-	if e != nil {
-		goto close_and_clean
-	}
+	f.Write([]byte{0xff,0xff,0xff,0xff})
+	binary.Write(f, binary.LittleEndian, uint32(db.version_seq+1))
+	f.Write([]byte("FINI"))
+	f.Sync()
 
-	e = binary.Write(f, binary.LittleEndian, uint32(db.version_seq+1))
-	if e != nil {
-		goto close_and_clean
+	if db.datfile!=nil {
+		db.datfile.Close()
+		os.Remove(fmt.Sprint(db.pathname, db.file_index))
 	}
+	db.datfile = f
 
-	_, e = f.Write([]byte("FINI"))
-	if e != nil {
-		goto close_and_clean
+	if db.logfile!=nil {
+		db.logfile.Close()
+		os.Remove(db.pathname+"log")
+		db.logfile = nil
 	}
-
-	os.Remove(fmt.Sprint(db.pathname, db.file_index))
-	os.Remove(db.pathname+"log")
 
 	db.version_seq++
 	db.file_index = new_file_index
+}
 
-	return
 
-close_and_clean:
-	f.Close()
-	os.Remove(fname)
+func (db *DB) loadrec(fpos int64) (value []byte) {
+	var u32 uint32
+	if fpos< 0 {
+		db.logfile.Seek(int64(-fpos)+KeySize+1, os.SEEK_SET)
+		binary.Read(db.logfile, binary.LittleEndian, &u32)
+		value = make([]byte, u32)
+		db.logfile.Read(value)
+	} else {
+		db.datfile.Seek(int64(fpos)+KeySize, os.SEEK_SET)
+		binary.Read(db.datfile, binary.LittleEndian, &u32)
+		value = make([]byte, u32)
+		db.datfile.Read(value)
+	}
 	return
 }

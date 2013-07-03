@@ -22,23 +22,30 @@ import (
 	"sync"
 )
 
-
 type KeyType uint64
 const KeySize = 8
 
+
+type oneIdx struct {
+	data []byte
+	fpos int64 // negative values point to the logfile
+}
 
 type DB struct {
 	pathname string
 
 	mutex sync.Mutex
-	cache map[KeyType] []byte
+	index map[KeyType] *oneIdx
 	file_index int // can be only 0 or 1
 	version_seq uint32
 
 	logfile *os.File
+	datfile *os.File
 
 	nosync bool
 	dirty bool
+
+	KeepInMem func(v []byte) bool
 }
 
 
@@ -66,7 +73,7 @@ func (db *DB) Load() {
 func (db *DB) Count() (l int) {
 	db.mutex.Lock()
 	db.load()
-	l = len(db.cache)
+	l = len(db.index)
 	db.mutex.Unlock()
 	return
 }
@@ -77,8 +84,12 @@ func (db *DB) Count() (l int) {
 func (db *DB) Browse(walk func(key KeyType, value []byte) bool) {
 	db.mutex.Lock()
 	db.load()
-	for k, v := range db.cache {
-		if !walk(k, v) {
+	for k, v := range db.index {
+		d := v.data
+		if d == nil {
+			d = db.loadrec(v.fpos)
+		}
+		if !walk(k, d) {
 			break
 		}
 	}
@@ -90,7 +101,13 @@ func (db *DB) Browse(walk func(key KeyType, value []byte) bool) {
 func (db *DB) Get(key KeyType) (value []byte) {
 	db.mutex.Lock()
 	db.load()
-	value, _ = db.cache[key]
+	if idx, ok := db.index[key]; ok {
+		if idx.data == nil {
+			value = db.loadrec(idx.fpos)
+		} else {
+			value = idx.data
+		}
+	}
 	db.mutex.Unlock()
 	return
 }
@@ -102,11 +119,11 @@ func (db *DB) Put(key KeyType, value []byte) {
 	if db.nosync {
 		db.dirty = true
 		db.load()
-		db.cache[key] = value
+		db.index[key] = &oneIdx{data:value}
 	} else {
-		db.addtolog(key, value)
-		if db.cache != nil {
-			db.cache[key] = value
+		fpos := db.addtolog(key, value)
+		if db.index != nil {
+			db.index[key] = &oneIdx{data:value, fpos:-fpos}
 		}
 	}
 	db.mutex.Unlock()
@@ -120,11 +137,11 @@ func (db *DB) Del(key KeyType) {
 	if db.nosync {
 		db.dirty = true
 		db.load()
-		delete(db.cache, key)
+		delete(db.index, key)
 	} else {
 		db.deltolog(key)
-		if db.cache != nil {
-			delete(db.cache, key)
+		if db.index != nil {
+			delete(db.index, key)
 		}
 	}
 	db.mutex.Unlock()
@@ -135,18 +152,11 @@ func (db *DB) Del(key KeyType) {
 // Return true if defrag hes been performed, and false if was not needed.
 func (db *DB) Defrag() (doing bool) {
 	db.mutex.Lock()
-	doing = db.logfile != nil
 	if doing {
-		go func() {
-			db.load()
-			db.logfile.Close()
-			db.logfile = nil
-			db.savefiledat()
-			db.mutex.Unlock()
-		}()
-	} else {
-		db.mutex.Unlock()
+		db.load()
+		db.savefiledat()
 	}
+	db.mutex.Unlock()
 	return
 }
 
@@ -176,13 +186,13 @@ func (db *DB) Close() {
 	if db.logfile != nil {
 		db.logfile.Close()
 	}
-	db.cache = nil
+	db.index = nil
 	db.mutex.Unlock()
 }
 
 
 func (db *DB) load() {
-	if db.cache == nil {
+	if db.index == nil {
 		db.loadfiledat()
 		db.loadfilelog()
 	}
