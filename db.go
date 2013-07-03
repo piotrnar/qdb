@@ -153,6 +153,7 @@ func (db *DB) Del(key KeyType) {
 // Return true if defrag hes been performed, and false if was not needed.
 func (db *DB) Defrag() (doing bool) {
 	db.mutex.Lock()
+	doing = db.logfile != nil
 	if doing {
 		db.load()
 		db.savefiledat()
