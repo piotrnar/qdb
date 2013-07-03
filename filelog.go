@@ -83,8 +83,7 @@ func (db *DB) loadfilelog() {
 			break
 		}
 		if u32 != crc.Sum32() {
-			println("CRC mismatch", lastvalidpos, key)
-			os.Exit(1)
+			println(db.pathname, "- log entry CRC mismatch")
 			e = errors.New("CRC mismatch")
 			break
 		}
