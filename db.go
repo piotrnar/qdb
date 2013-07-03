@@ -191,6 +191,11 @@ func (db *DB) Close() {
 	db.sync()
 	if db.logfile != nil {
 		db.logfile.Close()
+		db.logfile = nil
+	}
+	if db.datfile != nil {
+		db.datfile.Close()
+		db.datfile = nil
 	}
 	db.index = nil
 	db.mutex.Unlock()
