@@ -4,7 +4,6 @@ import (
 	"os"
 	"fmt"
 	"bytes"
-	"errors"
 	"io/ioutil"
 	"encoding/binary"
 )
@@ -45,72 +44,70 @@ func openAndGetSeq(fn string) (f *os.File, seq uint32) {
 }
 
 
-// allocate the cache map and loads it from disk
-func (db *DB) loadfiledat() (e error) {
-	var ks uint32
-
-	db.index = make(map[KeyType] *oneIdx)
-
-	f0, seq := openAndGetSeq(db.pathname+"0")
+func (db *DB) findnewdat() *os.File {
+	f0, seq0 := openAndGetSeq(db.pathname+"0")
 	f1, seq1 := openAndGetSeq(db.pathname+"1")
 
 	if f0 == nil && f1 == nil {
-		e = errors.New("No database")
-		return
+		return nil
 	}
 
 	if f0!=nil && f1!=nil {
 		// Both files are valid - take the one with higher sequence
-		if int32(seq - seq1) >= 0 {
+		if int32(seq0 - seq1) >= 0 {
 			f1.Close()
 			os.Remove(db.pathname+"1")
+			db.version_seq = seq0
 			db.file_index = 0
+			return f0
 		} else {
 			f0.Close()
 			f0 = f1
 			os.Remove(db.pathname+"0")
+			db.version_seq = seq1
 			db.file_index = 1
+			return f1
 		}
 	} else if f0==nil {
-		f0 = f1
-		seq = seq1
+		db.version_seq = seq1
 		db.file_index = 1
+		return f1
 	} else {
+		db.version_seq = seq0
 		db.file_index = 0
+		return f0
+	}
+}
+
+
+// allocate the cache map and loads it from disk
+func (db *DB) loadfiledat() {
+	var ks uint32
+	var key KeyType
+	var filepos int64
+
+	db.index = make(map[KeyType] *oneIdx)
+
+	db.datfile = db.findnewdat()
+	if db.datfile==nil {
+		return
 	}
 
-	readlimit, _ := f0.Seek(-12, os.SEEK_END)
-	f0.Seek(0, os.SEEK_SET)
-	dat, _ := ioutil.ReadAll(f0)
-	db.datfile = f0
+	db.datfile.Seek(0, os.SEEK_SET)
+	dat, _ := ioutil.ReadAll(db.datfile)
+	readlimit := int64(len(dat)-12)
 
 	f := bytes.NewReader(dat)
 
-	db.version_seq = seq
-
-	var key KeyType
-	var filepos int64
 	for filepos+KeySize+4 <= readlimit {
-		e = binary.Read(f, binary.LittleEndian, &key)
-		if e != nil {
-			break
-		}
-		e = binary.Read(f, binary.LittleEndian, &ks)
-		if e != nil {
-			break
-		}
+		binary.Read(f, binary.LittleEndian, &key)
+		binary.Read(f, binary.LittleEndian, &ks)
 		if db.NeverKeepInMem {
-			_, e = f.Seek(int64(ks), os.SEEK_CUR)
-			if e != nil {
-				break
-			}
+			f.Seek(int64(ks), os.SEEK_CUR)
 			db.index[key] = &oneIdx{fpos:filepos}
 		} else {
 			val := make([]byte, ks)
-			_, e = f.Read(val[:])
-			if e != nil {
-				break
-			}
+			f.Read(val[:])
 			if db.KeepInMem==nil || db.KeepInMem(val) {
 				db.index[key] = &oneIdx{data:val, fpos:filepos}
 			} else {
@@ -125,11 +122,10 @@ func (db *DB) loadfiledat() (e error) {
 
 
 func (db *DB) savefiledat() {
-	var f *os.File
 	new_file_index := 1 - db.file_index
 	fname := fmt.Sprint(db.pathname, new_file_index)
 
-	f, _ = os.Create(fname)
+	f := new(bytes.Buffer)
 
 	var v []byte
 	var fpos int64
@@ -154,13 +150,16 @@ func (db *DB) savefiledat() {
 	f.Write([]byte{0xff,0xff,0xff,0xff})
 	binary.Write(f, binary.LittleEndian, uint32(db.version_seq+1))
 	f.Write([]byte("FINI"))
-	f.Sync()
+
+	fi, _ := os.Create(fname)
+	fi.Write(f.Bytes())
+	fi.Sync()
 
 	if db.datfile!=nil {
 		db.datfile.Close()
 		os.Remove(fmt.Sprint(db.pathname, db.file_index))
 	}
-	db.datfile = f
+	db.datfile = fi
 
 	if db.logfile!=nil {
 		db.logfile.Close()
