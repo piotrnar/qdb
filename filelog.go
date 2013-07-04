@@ -3,7 +3,9 @@ package qdb
 import (
 	"os"
 	"io"
+	"bytes"
 	"errors"
+	"io/ioutil"
 	"hash/crc32"
 	"encoding/binary"
 )
@@ -35,8 +37,10 @@ func (db *DB) loadfilelog() {
 	if e != nil {
 		return
 	}
+	dat, _ := ioutil.ReadAll(db.logfile)
+	buf := bytes.NewReader(dat)
 
-	e = binary.Read(db.logfile, binary.LittleEndian, &u32)
+	e = binary.Read(buf, binary.LittleEndian, &u32)
 	if e != nil {
 		goto close_and_clean
 	}
@@ -46,16 +50,17 @@ func (db *DB) loadfilelog() {
 	}
 	db.lastvalidlogpos = 4
 
+
 	// Load records
 	for {
-		n, e = db.logfile.Read(cmd[:])
+		n, e = buf.Read(cmd[:])
 		if n!=1 || e!=nil {
 			if e==io.EOF {
 				e = nil
 			}
 			break
 		}
-		e = binary.Read(db.logfile, binary.LittleEndian, &key)
+		e = binary.Read(buf, binary.LittleEndian, &key)
 		if e!=nil {
 			break
 		}
@@ -63,12 +68,12 @@ func (db *DB) loadfilelog() {
 		crc.Write(cmd[:])
 		binary.Write(crc, binary.LittleEndian, key)
 		if cmd[0]==1 {
-			e = binary.Read(db.logfile, binary.LittleEndian, &u32)
+			e = binary.Read(buf, binary.LittleEndian, &u32)
 			if e != nil {
 				break
 			}
 			val = make([]byte, u32)
-			n, e = db.logfile.Read(val[:])
+			n, e = buf.Read(val)
 			if n != len(val) || e != nil {
 				break
 			}
@@ -78,7 +83,7 @@ func (db *DB) loadfilelog() {
 			e = errors.New("Unexpected command in logfile")
 			break
 		}
-		e = binary.Read(db.logfile, binary.LittleEndian, &u32)
+		e = binary.Read(buf, binary.LittleEndian, &u32)
 		if e != nil {
 			break
 		}
