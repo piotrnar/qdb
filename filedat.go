@@ -2,8 +2,10 @@ package qdb
 
 import (
 	"os"
-    "fmt"
+	"fmt"
+	"bytes"
 	"errors"
+	"io/ioutil"
 	"encoding/binary"
 )
 
@@ -49,36 +51,40 @@ func (db *DB) loadfiledat() (e error) {
 
 	db.index = make(map[KeyType] *oneIdx)
 
-	f, seq := openAndGetSeq(db.pathname+"0")
+	f0, seq := openAndGetSeq(db.pathname+"0")
 	f1, seq1 := openAndGetSeq(db.pathname+"1")
 
-	if f == nil && f1 == nil {
+	if f0 == nil && f1 == nil {
 		e = errors.New("No database")
 		return
 	}
 
-	if f!=nil && f1!=nil {
+	if f0!=nil && f1!=nil {
 		// Both files are valid - take the one with higher sequence
 		if int32(seq - seq1) >= 0 {
 			f1.Close()
 			os.Remove(db.pathname+"1")
 			db.file_index = 0
 		} else {
-			f.Close()
-			f = f1
+			f0.Close()
+			f0 = f1
 			os.Remove(db.pathname+"0")
 			db.file_index = 1
 		}
-	} else if f==nil {
-		f = f1
+	} else if f0==nil {
+		f0 = f1
 		seq = seq1
 		db.file_index = 1
 	} else {
 		db.file_index = 0
 	}
 
-	readlimit, _ := f.Seek(-12, os.SEEK_END)
-	f.Seek(0, os.SEEK_SET)
+	readlimit, _ := f0.Seek(-12, os.SEEK_END)
+	f0.Seek(0, os.SEEK_SET)
+	dat, _ := ioutil.ReadAll(f0)
+	db.datfile = f0
+
+	f := bytes.NewReader(dat)
 
 	db.version_seq = seq
 
@@ -114,7 +120,6 @@ func (db *DB) loadfiledat() (e error) {
 		filepos += int64(KeySize+4+ks)
 	}
 
-	db.datfile = f
 	return
 }
 
