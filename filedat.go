@@ -84,7 +84,7 @@ func (db *DB) findnewdat() *os.File {
 func (db *DB) loadfiledat() {
 	var ks uint32
 	var key KeyType
-	var filepos int64
+	var pos int64
 
 	db.index = make(map[KeyType] *oneIdx)
 
@@ -97,24 +97,26 @@ func (db *DB) loadfiledat() {
 	dat, _ := ioutil.ReadAll(db.datfile)
 	readlimit := int64(len(dat)-12)
 
-	f := bytes.NewReader(dat)
-
-	for filepos+KeySize+4 <= readlimit {
-		binary.Read(f, binary.LittleEndian, &key)
-		binary.Read(f, binary.LittleEndian, &ks)
+	for pos+12 <= readlimit {
+		key = KeyType(binary.LittleEndian.Uint64(dat[pos:pos+8]))
+		ks = binary.LittleEndian.Uint32(dat[pos+8:pos+12])
+		if pos+12+int64(ks) > readlimit {
+			println("loadfiledat EOF")
+			break
+		}
 		if db.NeverKeepInMem {
-			f.Seek(int64(ks), os.SEEK_CUR)
-			db.index[key] = &oneIdx{fpos:filepos}
+			db.index[key] = &oneIdx{fpos:pos}
 		} else {
-			val := make([]byte, ks)
-			f.Read(val[:])
-			if db.KeepInMem==nil || db.KeepInMem(val) {
-				db.index[key] = &oneIdx{data:val, fpos:filepos}
+			dd := dat[pos+12:pos+12+int64(ks)]
+			if db.KeepInMem==nil || db.KeepInMem(dd) {
+				val := make([]byte, ks)
+				copy(val, dd)
+				db.index[key] = &oneIdx{data:val, fpos:pos}
 			} else {
-				db.index[key] = &oneIdx{fpos:filepos}
+				db.index[key] = &oneIdx{fpos:pos}
 			}
 		}
-		filepos += int64(KeySize+4+ks)
+		pos += int64(KeySize+4+ks)
 	}
 
 	return
